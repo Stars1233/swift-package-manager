@@ -1300,6 +1300,9 @@ struct BuildCommandTestCases {
     }
 
     @Test(
+        // Windows builds of ExecutableNew using swiftbuild can fail because of problem with handling long paths which
+        // is root cause of linked issue
+        .issue("https://github.com/swiftlang/swift-package-manager/issues/9420", relationship: .defect),
         .tags(
             .Feature.CommandLineArguments.DisableGetTaskAllowEntitlement,
             .Feature.CommandLineArguments.EnableGetTaskAllowEntitlement,
@@ -1390,34 +1393,38 @@ struct BuildCommandTestCases {
 
             verify(entitlements: entitlements, getTaskAllow: .forbidden)
             #else
-            var buildResult = try await build(
-                ["-v"],
-                packagePath: fixturePath,
-                configuration: buildConfiguration,
-                buildSystem: buildSystem
-            )
+            try await withKnownIssue(isIntermittent: true) {
+                var buildResult = try await build(
+                    ["-v"],
+                    packagePath: fixturePath,
+                    configuration: buildConfiguration,
+                    buildSystem: buildSystem
+                )
 
-            #expect(!buildResult.stdout.contains("codesign --force --sign - --entitlements"))
+                #expect(!buildResult.stdout.contains("codesign --force --sign - --entitlements"))
 
-            buildResult = try await build(
-                ["--disable-get-task-allow-entitlement", "-v"],
-                packagePath: fixturePath,
-                configuration: buildConfiguration,
-                buildSystem: buildSystem
-            )
+                buildResult = try await build(
+                    ["--disable-get-task-allow-entitlement", "-v"],
+                    packagePath: fixturePath,
+                    configuration: buildConfiguration,
+                    buildSystem: buildSystem
+                )
 
-            #expect(!buildResult.stdout.contains("codesign --force --sign - --entitlements"))
-            #expect(buildResult.stderr.contains(SwiftCommandState.entitlementsMacOSWarning))
+                #expect(!buildResult.stdout.contains("codesign --force --sign - --entitlements"))
+                #expect(buildResult.stderr.contains(SwiftCommandState.entitlementsMacOSWarning))
 
-            buildResult = try await build(
-                ["--enable-get-task-allow-entitlement", "-v"],
-                packagePath: fixturePath,
-                configuration: buildConfiguration,
-                buildSystem: buildSystem
-            )
+                buildResult = try await build(
+                    ["--enable-get-task-allow-entitlement", "-v"],
+                    packagePath: fixturePath,
+                    configuration: buildConfiguration,
+                    buildSystem: buildSystem
+                )
 
-            #expect(!buildResult.stdout.contains("codesign --force --sign - --entitlements"))
-            #expect(buildResult.stderr.contains(SwiftCommandState.entitlementsMacOSWarning))
+                #expect(!buildResult.stdout.contains("codesign --force --sign - --entitlements"))
+                #expect(buildResult.stderr.contains(SwiftCommandState.entitlementsMacOSWarning))
+            } when: {
+                buildSystem == .swiftbuild && ProcessInfo.hostOperatingSystem == .windows
+            }
             #endif
         }
     }
